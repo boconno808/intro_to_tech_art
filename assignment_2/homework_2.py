@@ -12,24 +12,8 @@ def create_reference(file_path, file_namespace):
         maya.cmds.error("File does not exist: {0}".format(file_path))
         return
     
-    maya.cmds.file( file_path, r = True, ns = file_namespace )
-
-    
-def connect_attributes(src, dst, attr):
-    
-    #given an attr, source and destination
-    srcString = "{0}.{1}".format(src, attr)
-    dstString = "{0}.{1}".format(dst, attr)
-    
-    maya.cmds.connectAttr(srcString, dstString, f = True)
-
-def connect_attributes_joint(obj1_joint, obj2_joint):
-    
-    attr_list = ["translateX", "translateY", "translateZ", "rotateX", "rotateY", "rotateZ", "scaleX", "scaleY", "scaleZ"]
-    
-    for attr in attr_list: 
-        connect_attributes(obj1_joint, obj2_joint, attr)
-    
+    maya.cmds.file(file_path, r = True, ns = file_namespace)
+  
 def connect_attributes_all_joints(ns1_all_joints, ns2_all_joints, ns1, ns2):
     
     hashset_ns1 = dict.fromkeys(ns1_all_joints, True)
@@ -96,7 +80,7 @@ def connect_attributes_all_joints(ns1_all_joints, ns2_all_joints, ns1, ns2):
         if no_ns_joint == 'RightHandThumb3':
             maya.cmds.parentConstraint('{0}:{1}'.format(ns1,'RThumb_End'), '{0}:{1}'.format(ns2, no_ns_joint), st = ["x", "y", "z"], mo = True)
         
-        #If animation has corresponding joint connect them
+        # If animation has corresponding joint connect them
         if hashset_ns1.has_key(ns1_joint):
             
             if no_ns_joint == 'Spine1':
@@ -129,7 +113,6 @@ def connect_attributes_all_joints(ns1_all_joints, ns2_all_joints, ns1, ns2):
             else: 
                 maya.cmds.parentConstraint(ns1_joint, ns2_joint, st = ["x", "y", "z"], mo = True)
 
-
 def create_file_namespace(file_path, needs_text):
     
     if not os.path.exists(file_path):
@@ -146,16 +129,79 @@ def create_file_namespace(file_path, needs_text):
     
     return file_path_name
 
+def files_from_dir(directory):
+    
+    file_list = os.listdir(directory)
+    
+    return file_list
+
 def get_joints_from_namespace(ns):
     
     return maya.cmds.ls("{0}:*".format(ns), type = "joint")
 
+def import_file(file_path, file_namespace):
+    
+    if not os.path.exists(file_path):
+        
+        maya.cmds.error("File does not exist: {0}".format(file_path))
+        return
+    
+    maya.cmds.file( file_path, i = True, ns = file_namespace )
+  
+def map_animation_to_char(anim_path, char_path, anim_file):
+    
+    char_ns = create_file_namespace(char_path, False)
+    anim_ns = create_file_namespace(anim_path, True)
+    
+    # Bring in character
+    import_file(char_path, char_ns)
+    
+    # Bring in the animation
+    create_reference(anim_path, anim_ns)
+    
+    # Set the last keyframe to be as long as the reference animation 
+    animCurves = maya.cmds.ls(type='animCurve')
+    last = cmds.findKeyframe(animCurves, which='last')
+    
+    maya.cmds.playbackOptions(maxTime = last)
+    
+    # Get a list of joints for both anim and char
+    char_joints = get_joints_from_namespace(char_ns)
+    anim_joints = get_joints_from_namespace(anim_ns)
+    
+    # Attach animation to character 
+    connect_attributes_all_joints(anim_joints, char_joints, anim_ns, char_ns)
+    
+    # Bake animation bones 
+    maya.cmds.select(cl = True)
+    maya.cmds.select(char_joints)
+    
+    start_time = maya.cmds.playbackOptions(q = True, min = True)
+    end_time = maya.cmds.playbackOptions(q = True, max = True)
+    
+    maya.cmds.bakeResults(
+                            simulation = True,
+                            time = (start_time, end_time),
+                            sampleBy = 1,
+                            oversamplingRate = 1,
+                            disableImplicitControl = True,
+                            preserveOutsideKeys = True,
+                            sparseAnimCurveBake = False,
+                            removeBakedAnimFromLayer = False,
+                            bakeOnOverrideLayer = False, 
+                            minimizeRotation = True,
+                            controlPoints = False,
+                            shape = True
+                            )
+    # Remove reference  
+    maya.cmds.file("C:/Users/Imoto/Documents/maya/projects/homework2/animations/maya/{0}".format(anim_file), rr = True)
+    
 def run():
     
-    # get all animation files in the animation folder
-    anim_files = maya.cmds.getFileList( folder = 'C:/Users/Imoto/Documents/maya/projects/homework2/animations/maya/')
-    
-    for anim_file in anim_files: 
+    # Get all animation files in the animation folder
+    anim_files = files_from_dir(r'C:/Users/Imoto/Documents/maya/projects/homework2/animations/maya/')
+
+    for anim_file in anim_files:
     
         # Creates a new scene
         maya.cmds.file(new = True, force = True)
@@ -164,61 +210,13 @@ def run():
         # Create char and anim namespace
         char_path = "C:/Users/Imoto/Documents/maya/projects/homework2/character.mb"
         anim_path = "C:/Users/Imoto/Documents/maya/projects/homework2/animations/maya/{0}".format(anim_file)
-    
         
-        
-        char_ns = create_file_namespace(char_path, False)
-        anim_ns = create_file_namespace(anim_path, True)
-        
-        # Bring in character
-        create_reference(char_path, char_ns)
-        
-        # Bring in the animation
-        create_reference(anim_path, anim_ns)
-        
-        # set the last keyframe to be as long as the reference animation 
-        animCurves = maya.cmds.ls(type='animCurve')
-        last = cmds.findKeyframe(animCurves, which='last')
-        
-        maya.cmds.playbackOptions(maxTime = last)
-        
-        # get a list of joints for both anim and char
-    
-        char_joints = get_joints_from_namespace(char_ns)
-        anim_joints = get_joints_from_namespace(anim_ns)
-        
-        # Attach animation to character 
-        connect_attributes_all_joints(anim_joints, char_joints, anim_ns, char_ns)
-        
-        # Bake animation bones 
-        
-        maya.cmds.select(cl = True)
-        maya.cmds.select(char_joints)
-        
-        start_time = maya.cmds.playbackOptions(q = True, min = True)
-        end_time = maya.cmds.playbackOptions(q = True, max = True)
-        
-        maya.cmds.bakeResults(
-                                simulation = True,
-                                time = (start_time, end_time),
-                                sampleBy = 1,
-                                oversamplingRate = 1,
-                                disableImplicitControl = True,
-                                preserveOutsideKeys = True,
-                                sparseAnimCurveBake = False,
-                                removeBakedAnimFromLayer = False,
-                                bakeOnOverrideLayer = False, 
-                                minimizeRotation = True,
-                                controlPoints = False,
-                                shape = True
-                                )
-        # remove reference  
-        maya.cmds.file("C:/Users/Imoto/Documents/maya/projects/homework2/animations/maya/{0}".format(anim_file), rr = True)
-        
+        map_animation_to_char(anim_path, char_path, anim_file)
+
         # Save a file
-        renamed_file = "C:/Users/Imoto/Documents/maya/projects/homework2/baked/{0}".format(anim_file)
+        renamed_file = "anim{0}".format(anim_file)
         
         maya.cmds.file(rename = renamed_file)
-        maya.cmds.file(save = True, f = True)        
-    
+        maya.cmds.file(save = True, type='mayaAscii', f = True)       
+        
 run()
